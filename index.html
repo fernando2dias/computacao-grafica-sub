@@ -1,0 +1,322 @@
+<!--Fernando Dias Motta - RA 180016-->
+
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+
+    <title>Computação Gráfica</title>
+
+    <!-- Babylon.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.6.2/dat.gui.min.js"></script>
+    <script src="https://preview.babylonjs.com/ammo.js"></script>
+    <script src="https://preview.babylonjs.com/cannon.js"></script>
+    <script src="https://preview.babylonjs.com/Oimo.js"></script>
+    <script src="https://preview.babylonjs.com/earcut.min.js"></script>
+    <script src="https://preview.babylonjs.com/babylon.js"></script>
+    <script src="https://preview.babylonjs.com/materialsLibrary/babylonjs.materials.min.js"></script>
+    <script src="https://preview.babylonjs.com/proceduralTexturesLibrary/babylonjs.proceduralTextures.min.js"></script>
+    <script src="https://preview.babylonjs.com/postProcessesLibrary/babylonjs.postProcess.min.js"></script>
+    <script src="https://preview.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+    <script src="https://preview.babylonjs.com/serializers/babylonjs.serializers.min.js"></script>
+    <script src="https://preview.babylonjs.com/gui/babylon.gui.min.js"></script>
+    <script src="https://preview.babylonjs.com/inspector/babylon.inspector.bundle.js"></script>
+
+    <style>
+        html,
+        body {
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        #renderCanvas {
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="renderCanvas"></canvas>
+    <script>
+        var canvas = document.getElementById("renderCanvas");
+
+        var engine = null;
+        var scene = null;
+        var sceneToRender = null;
+        var createDefaultEngine = function () { return new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true, disableWebGL2Support: false }); };
+        var touched;
+        var sphere;
+        var ground;
+        var createScene = function () {
+
+            // This creates a basic Babylon Scene object (non-mesh)
+            var scene = new BABYLON.Scene(engine);
+
+            scene.enablePhysics();
+
+            // Physics engine
+            physicsViewer = new BABYLON.Debug.PhysicsViewer();
+            physicsHelper = new BABYLON.PhysicsHelper(scene);
+
+            //setup camera
+            var camera = new BABYLON.ArcRotateCamera("Camera", BABYLON.Tools.ToRadians(-120), BABYLON.Tools.ToRadians(80), 65, new BABYLON.Vector3(0, -15, 0), scene); camera.attachControl(canvas, false);
+
+
+            //setup lights
+            var light1 = new BABYLON.PointLight("light1", new BABYLON.Vector3(0, 5, -6), scene);
+
+
+
+            //create a box used to trigger the destrucion of marbles
+            ground = BABYLON.MeshBuilder.CreateBox("ground", { width: 100, depth: 100, height: 0.5 }, scene);
+            ground.position = new BABYLON.Vector3(0, -50, 0);
+            ground.visibility = 1;
+
+            ground.physicsImpostor = new BABYLON.PhysicsImpostor(ground, BABYLON.PhysicsImpostor.MeshImpostor, { mass: 0, friction: 1 }, scene);
+            var groundMaterial = new BABYLON.StandardMaterial("boxMaterial", scene);
+            groundMaterial.diffuseTexture = new BABYLON.Texture("./textures/lunar.jpg", scene);
+            ground.material = groundMaterial;
+
+
+
+            var skybox = BABYLON.MeshBuilder.CreateBox(
+                "skybox",
+                { size: 500 },
+                scene
+            );
+            skybox.infiniteDistance = true;
+            var skyboxMaterial = new BABYLON.StandardMaterial("skybox", scene);
+            skyboxMaterial.backFaceCulling = false;
+            var files = [
+                "./textures/sky.jpg",
+                "./textures/sky.jpg",
+                "./textures/sky.jpg",
+                "./textures/sky.jpg",
+                "./textures/sky.jpg",
+                "./textures/sky.jpg",
+            ];
+            skyboxMaterial.reflectionTexture = BABYLON.CubeTexture.CreateFromImages(
+                files,
+                scene
+            );
+            skyboxMaterial.reflectionTexture.coordinatesMode =
+                BABYLON.Texture.SKYBOX_MODE;
+            skyboxMaterial.diffuseColor = new BABYLON.Color3(0, 0, 0);
+            skyboxMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+            skybox.material = skyboxMaterial;
+
+            PositionPipe(scene);
+
+
+            const box = BABYLON.MeshBuilder.CreateBox("box", { size: 1, width: 20, height: 5, depth: 50 }, scene);
+            box.position.y = -30;
+            box.rotation.x = BABYLON.Tools.ToRadians(-30);;
+            box.physicsImpostor = new BABYLON.PhysicsImpostor(box, BABYLON.PhysicsImpostor.MeshImpostor, { mass: 0, friction: 1 }, scene);
+
+            var boxMaterial = new BABYLON.StandardMaterial("boxMaterial", scene);
+            boxMaterial.diffuseTexture = new BABYLON.Texture("./textures/metal.jpg", scene);
+            box.material = boxMaterial;
+
+            // Create spheres to be thrown
+            var throwSpheres = [];
+            var sphereIndex = 0;
+
+
+            // On pointer event, fire a sphere
+            scene.onPointerObservable.add((e) => {
+
+                if (e.type == BABYLON.PointerEventTypes.POINTERDOWN) {
+
+                    createSphere(scene);
+
+                }
+            })
+
+
+
+            const test = scene.getMeshByName('sphere1');
+
+
+            //tentei fazer mas bugou
+            /* 
+            scene.registerBeforeRender(function () {
+                if (ground.intersectsMesh(test, false)) {
+                               
+                    }
+
+            });
+            */
+
+
+            return scene;
+        };
+
+        const createSphere = (scene) => {
+            sphere = BABYLON.Mesh.CreateSphere("sphere1", 16, 2, scene);
+            sphere.position.x = 2;
+            sphere.position.y = 20;
+            sphere.position.z = -7;
+
+            sphere.physicsImpostor = new BABYLON.PhysicsImpostor(sphere, BABYLON.PhysicsImpostor.SphereImpostor, { mass: 0.2 }, scene);
+
+            return sphere;
+        }
+
+        //tentei aplicar
+        const setParticules = (x, y, z) => {
+            const bounce = new BABYLON.Sound("bounce", "./assets/star.mp3", scene,
+                null, {
+                loop: false,
+                autoplay: true
+            });
+
+            var particleSystem = new BABYLON.ParticleSystem("particles", 10, scene);
+
+            //Texture of each particle
+            particleSystem.particleTexture = new BABYLON.Texture(
+                "./textures/star.png",
+                scene
+            );
+
+            // Where the particles come from
+            particleSystem.emitter = new BABYLON.Vector3(x, y, z); // the starting object, the emitter
+            particleSystem.minEmitBox = new BABYLON.Vector3(-0.5, 0, 0); // Starting all from
+            particleSystem.maxEmitBox = new BABYLON.Vector3(0.5, 0, 0); // To...
+
+            // Colors of all particles
+            particleSystem.color1 = new BABYLON.Color4(1, 0.952, 0.44, 1.0);
+            particleSystem.color2 = new BABYLON.Color4(1, 0.3, 0.09, 1.0);
+            particleSystem.colorDead = new BABYLON.Color4(0, 0, 0.2, 0.0);
+
+            // Size of each particle random between...
+            particleSystem.minSize = 1;
+            particleSystem.maxSize = 5;
+
+            // Life time of each particle random between...
+            particleSystem.minLifeTime = 1;
+            particleSystem.maxLifeTime = 4;
+
+            // Emission rate
+            particleSystem.emitRate = 500;
+
+            // Blend mode : BLENDMODE_ONEONE, or BLENDMODE_STANDARD
+            particleSystem.blendMode = BABYLON.ParticleSystem.BLENDMODE_ONEONE;
+
+            // Set the gravity of all particles
+            particleSystem.gravity = new BABYLON.Vector3(0, -9.81, 0);
+
+            // Direction of each particle after it has been emitted
+            particleSystem.direction1 = new BABYLON.Vector3(-2, 3, 2);
+            particleSystem.direction2 = new BABYLON.Vector3(2, 5, -2);
+
+            // Angular speed, in radians
+            particleSystem.minAngularSpeed = 0;
+            particleSystem.maxAngularSpeed = Math.PI;
+
+            // Speed
+            particleSystem.minEmitPower = 1;
+            particleSystem.maxEmitPower = 3;
+            particleSystem.updateSpeed = 0.025;
+
+            // Start the particle system
+            particleSystem.start();
+            particleSystem.targetStopDuration = 2;
+
+            return particleSystem;
+        }
+
+
+        const PositionPipe = (scene) => {
+            // 1
+            const pipe = createPipe(4, 5, 30, scene);
+            pipe.rotation.z = BABYLON.Tools.ToRadians(180);
+            pipe.rotation.x = BABYLON.Tools.ToRadians(-30);
+            pipe.position = new BABYLON.Vector3(1.8, -1, 0);
+
+            pipe.physicsImpostor = new BABYLON.PhysicsImpostor(pipe, BABYLON.PhysicsImpostor.MeshImpostor, { mass: 0, friction: 1 }, scene);
+
+            // rampaPipe(0, -1, -1.5, -45, 0, 0);
+
+            const mat = new BABYLON.StandardMaterial("clearPipe", scene);
+            mat.diffuseColor = new BABYLON.Color3(50 / 255, 169 / 255, 78 / 255);
+            //mat.emissiveColor = new BABYLON.Color3(0.1, 0.1, 0.2)
+            mat.alpha = 0.8
+            pipe.material = mat
+        }
+
+
+        const createPipe = (diamInner, diamOuter, length, scene) => {
+            // Create the outer wall using a Cylinder mesh
+            const mOuter = BABYLON.MeshBuilder.CreateCylinder(
+                "mOuter",
+                {
+                    diameter: diamOuter,
+                    height: length,
+                },
+                scene,
+            );
+            // Create the inner wall using a Tube mesh
+            const mInner = BABYLON.MeshBuilder.CreateTube(
+                "mInner",
+                {
+                    path: [new BABYLON.Vector3(0, -length / 2, 0), new BABYLON.Vector3(0, length / 2, 0)],
+                    radius: diamInner / 2,
+                    sideOrientation: BABYLON.Mesh.DOUBLESIDE,
+                },
+                scene,
+            );
+            // Create CSG objects from each mesh
+            const outerCSG = BABYLON.CSG.FromMesh(mOuter);
+            const innerCSG = BABYLON.CSG.FromMesh(mInner);
+            // Create a new CSG object by subtracting the inner tube from the outer cylinder
+            const pipeCSG = outerCSG.subtract(innerCSG);
+            // Create the resulting mesh from the new CSG object
+            const mPipe = pipeCSG.toMesh("mPipe", null, scene);
+            // Dispose of the meshes, no longer needed
+            mInner.dispose();
+            mOuter.dispose();
+            scene.removeMesh(mInner);
+            scene.removeMesh(mOuter);
+            // Return the result
+            return mPipe;
+        }
+
+
+
+        window.initFunction = async function () {
+            var asyncEngineCreation = async function () {
+                try {
+                    return createDefaultEngine();
+                } catch (e) {
+                    console.log("the available createEngine function failed. Creating the default engine instead");
+                    return createDefaultEngine();
+                }
+            }
+
+            window.engine = await asyncEngineCreation();
+            if (!engine) throw 'engine should not be null.';
+            window.scene = createScene();
+        };
+        initFunction().then(() => {
+            sceneToRender = scene
+            engine.runRenderLoop(function () {
+                if (sceneToRender && sceneToRender.activeCamera) {
+                    sceneToRender.render();
+                }
+            });
+        });
+
+        // Resize
+        window.addEventListener("resize", function () {
+            engine.resize();
+        });
+    </script>
+</body>
+
+</html>
